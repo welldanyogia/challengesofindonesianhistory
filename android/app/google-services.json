@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "998006918407",
+    "project_id": "mobilegame-86f16",
+    "storage_bucket": "mobilegame-86f16.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:998006918407:android:abbbfbed642168020b49a2",
+        "android_client_info": {
+          "package_name": "challengesofindonesianhistory.challengesofindonesianhistory"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLZLDPlHi5EjHucAdmEDbd9gl1F9FN_YU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
