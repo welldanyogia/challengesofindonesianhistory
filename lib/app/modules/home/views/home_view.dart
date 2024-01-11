@@ -6,7 +6,31 @@ import '../controllers/home_controller.dart';
 
 class HomeView extends GetView<HomeController> {
   final HomeController homeController = Get.put(HomeController());
-  HomeView({Key? key}) : super(key: key);
+  late Future<List<DocumentSnapshot>> futureQuestions;
+  int incorrectAttempts = 0;
+  int maxAttempts = 3;
+  late RxString question = "".obs;
+  late RxString answer = "".obs;
+  late RxList<String> choices = <String>[].obs;
+  late List<DocumentSnapshot> allQuestions;
+  int currentQuestionIndex = 0;
+
+  HomeView({Key? key}) : super(key: key) {
+    futureQuestions = getAllQuestions();
+  }
+
+  Future<List<DocumentSnapshot>> getAllQuestions() async {
+    try {
+      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+          .collection('Questions')
+          .get();
+      print(querySnapshot.docs.length);
+      return querySnapshot.docs;
+    } catch (e) {
+      print('Error fetching all questions: $e');
+      return [];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,32 +38,38 @@ class HomeView extends GetView<HomeController> {
     double screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      body: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance
-            .collection('Questions')
-            .doc('tOZLBwbHzWZR3ByHM27E')
-            .get(),
+      body: FutureBuilder<List<DocumentSnapshot>>(
+        future: futureQuestions,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return CircularProgressIndicator(); // Loading indicator while fetching data
+            return CircularProgressIndicator();
           }
 
           if (snapshot.hasError) {
             return Text('Error: ${snapshot.error}');
           }
 
-          var data = snapshot.data?.data() as Map<String, dynamic>;
-          String question = data['Question'] ?? '';
-          List<String> choices = [
+          allQuestions = snapshot.data ?? [];
+
+          if (allQuestions.isEmpty) {
+            return Text('No questions available.');
+          }
+
+          var data = allQuestions[currentQuestionIndex].data() as Map<String, dynamic>? ?? {};
+          print(data);
+          question.value = data['Question'] ?? '';
+          choices.value = [
             data['A'] ?? '',
             data['B'] ?? '',
             data['C'] ?? '',
             data['D'] ?? '',
           ];
-          String answer = data['Answer'] ?? '';
+
+          answer.value = data['Answer'] ?? '';
 
           return Stack(
             children: [
+              buildChancesIndicator(),
               Container(
                 decoration: BoxDecoration(
                   image: DecorationImage(
@@ -48,14 +78,14 @@ class HomeView extends GetView<HomeController> {
                   ),
                 ),
               ),
-              Container(
+              Obx(() => Container(
                 margin: EdgeInsets.only(
                     top: screenHeight * 0.08, left: screenWidth * 0.44),
                 child: Text(
-                  homeController.count.value.toString(), // Use this to get the numeric value as a string
+                  homeController.count.string,
                   style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                 ),
-              ),
+              )),
               Container(
                 margin: EdgeInsets.only(
                     top: screenHeight * 0.15, left: screenWidth * 0.05),
@@ -69,48 +99,50 @@ class HomeView extends GetView<HomeController> {
                         color: Colors.brown.withOpacity(0.6), width: 3),
                   ),
                   child: Center(
-                    child: Text(
-                      question,
+                    child: Obx(() => Text(
+                      question.string,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Color.fromARGB(255, 121, 72, 72)),
-                    ),
+                    )),
                   ),
                 ),
               ),
-              buildAnswerButton(
-                choice: choices[0],
+              Obx(() => buildAnswerButton(
+                choice: choices[0].obs,
                 onPressed: () {
-                  checkAnswer(choices[0], answer);
+                  checkAnswer(choices[0], answer.toString());
                 },
                 topMargin: screenHeight * 0.6,
                 leftMargin: screenWidth * 0.05,
-              ),
-              buildAnswerButton(
-                choice: choices[1],
+              )),
+              Obx(() => buildAnswerButton(
+                choice: choices[1].obs,
                 onPressed: () {
-                  checkAnswer(choices[1], answer);
+                  checkAnswer(choices[1], answer.toString());
                 },
                 topMargin: screenHeight * 0.6,
                 leftMargin: screenWidth * 0.55,
-              ),
-              buildAnswerButton(
-                choice: choices[2],
+              )),
+              Obx(() => buildAnswerButton(
+                choice: choices[2].obs,
                 onPressed: () {
-                  checkAnswer(choices[2], answer);
+                  checkAnswer(choices[2], answer.toString());
                 },
                 topMargin: screenHeight * 0.73,
                 leftMargin: screenWidth * 0.05,
-              ),
-              buildAnswerButton(
-                choice: choices[3],
+              )),
+              Obx(() => buildAnswerButton(
+                choice: choices[3].obs,
                 onPressed: () {
-                  checkAnswer(choices[3], answer);
+                  checkAnswer(choices[3], answer.toString());
                 },
                 topMargin: screenHeight * 0.73,
                 leftMargin: screenWidth * 0.55,
-              ),
+              ))
+              ,
             ],
           );
         },
@@ -119,7 +151,7 @@ class HomeView extends GetView<HomeController> {
   }
 
   Container buildAnswerButton({
-    required String choice,
+    required RxString choice,
     required VoidCallback onPressed,
     required double topMargin,
     required double leftMargin,
@@ -145,7 +177,8 @@ class HomeView extends GetView<HomeController> {
             ),
           ),
           child: Text(
-            choice,
+            choice.string,
+            textAlign: TextAlign.center,
             style: TextStyle(color: Colors.brown),
           ),
         ),
@@ -155,11 +188,129 @@ class HomeView extends GetView<HomeController> {
 
   void checkAnswer(String selectedAnswer, String correctAnswer) {
     if (selectedAnswer == correctAnswer) {
-      // Correct answer, update points
-      homeController.count += 10;// Adjust the points as needed
-      print(homeController.count.toString());
+      homeController.count += 10;
+      Get.snackbar(
+        'Correct!',
+        'Score: ${homeController.count}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      updateQuestion();
     } else {
-      // Incorrect answer, handle accordingly
+      incorrectAttempts++;
+      Get.snackbar(
+        'InCorrect!',
+        'Score: ${homeController.count}',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      if (incorrectAttempts >= maxAttempts) {
+        showTryAgainDialog();
+      }
     }
+  }
+
+  void updateQuestion() {
+    if (currentQuestionIndex < allQuestions.length - 1) {
+      currentQuestionIndex++;
+      question.value = allQuestions[currentQuestionIndex]['Question'] ?? '';
+      choices.value = [
+        allQuestions[currentQuestionIndex]['A'] ?? '',
+        allQuestions[currentQuestionIndex]['B'] ?? '',
+        allQuestions[currentQuestionIndex]['C'] ?? '',
+        allQuestions[currentQuestionIndex]['D'] ?? '',
+      ];
+      answer.value=allQuestions[currentQuestionIndex]['Answer'] ?? "";
+      print(answer.toString());
+      print(question.toString());
+      updateUI();
+    } else {
+      showGameOverDialog();
+    }
+  }
+
+  void updateUI() {
+    Get.find<HomeController>().update();
+  }
+
+  Widget buildChancesIndicator() {
+    return Container(
+      margin: EdgeInsets.only(top: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(
+          maxAttempts,
+              (index) => Container(
+            margin: EdgeInsets.symmetric(horizontal: 5),
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: index < maxAttempts - incorrectAttempts
+                  ? Colors.green
+                  : Colors.red,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void showTryAgainDialog() {
+    Get.defaultDialog(
+      title: 'Game Over',
+      content: Column(
+        children: [
+          Text('You have reached the maximum incorrect attempts.'),
+          buildChancesIndicator(),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () {
+              incorrectAttempts = 0;
+              currentQuestionIndex = 0;
+              futureQuestions = getAllQuestions();
+              updateUI();
+              Get.back();
+            },
+            child: Text('Try Again'),
+          ),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: Text('Exit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showGameOverDialog() {
+    Get.defaultDialog(
+      title: 'You win',
+      content: Column(
+        children: [
+          Text('You have completed all questions!'),
+          buildChancesIndicator(),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () {
+              incorrectAttempts = 0;
+              currentQuestionIndex = 0;
+              futureQuestions = getAllQuestions();
+              updateUI();
+              Get.back();
+            },
+            child: Text('Play Again'),
+          ),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: Text('Exit'),
+          ),
+        ],
+      ),
+    );
   }
 }
